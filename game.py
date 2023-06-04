@@ -110,16 +110,21 @@ for i in input().split():
     my_base_index = int(i)
     my_bases.add(my_base_index)
 
-opp_bases = set()
+opp_bases = []
 for i in input().split():
     opp_base_index = int(i)
-    opp_bases.add(opp_base_index)
+    opp_bases.append(opp_base_index)
 
-closest_crystals_map = find_shortest_path(cells, my_base_index, crystals)
-closest_crystals = sorted(list(closest_crystals_map.items()), key=lambda x: len(x[1]))
+crystals_and_eggs = crystals + eggs
+closest_crystals = {}
+closest_eggs = {}
+for base_idx in my_bases:
+    closest_map = find_shortest_path(cells, base_idx, crystals_and_eggs)
+    closest_crystals_map = {k: v for k, v in closest_map.items() if k in crystals}
+    closest_crystals[base_idx] = sorted(list(closest_crystals_map.items()), key=lambda x: len(x[1]))
 
-closest_eggs_map = find_shortest_path(cells, my_base_index, eggs)
-closest_eggs = sorted(list(closest_eggs_map.items()), key=lambda x: len(x[1]))
+    closest_eggs_map = {k: v for k, v in closest_map.items() if k in eggs}
+    closest_eggs[base_idx] = sorted(list(closest_eggs_map.items()), key=lambda x: len(x[1]))
 
 # game loop
 starting_ants = 0
@@ -138,33 +143,56 @@ while True:
     if starting_ants == 0:
         starting_ants = my_ants_count
 
-    for idx in range(len(closest_crystals)-1, -1, -1):
-        if cells[closest_crystals[idx][0]].resources == 0:
-            del closest_crystals[idx]
-
-    while closest_eggs and cells[closest_eggs[0][0]].resources == 0:
-        del closest_eggs[0]
-
-    num_crystals = 2 + int(not bool(closest_eggs)) * 2
-    # Write an action using print
-    # To debug: print("Debug messages...", file=sys.stderr, flush=True)
     cmd = ""
-    for i in range(num_crystals):
-        if i >= len(closest_crystals):
-            break
+    for opp_base_idx, base_idx in enumerate(my_bases):
+        for idx in range(len(closest_crystals[base_idx])-1, -1, -1):
+            if cells[closest_crystals[base_idx][idx][0]].resources == 0:
+                del closest_crystals[base_idx][idx]
 
-        if cmd:
-            cmd += "; "
+        for idx in range(len(closest_eggs[base_idx])-1, -1, -1):
+            if cells[closest_eggs[base_idx][idx][0]].resources == 0:
+                del closest_eggs[base_idx][idx]
 
-        cmd += f"{Commands.LINE.value} {my_base_index} {closest_crystals[i][0]} 2"
+        # num_crystals = 3 + int(not bool(closest_eggs[base_idx])) * 2
+        should_attack = False
+        num_crystals = math.ceil(my_ants_count / (starting_ants * 1.0))
+        if closest_eggs[base_idx]:
+            num_eggs = math.ceil(my_ants_count / (starting_ants * 2.0)) + 1
+        else:
+            num_eggs = 0
+            should_attack = True
 
-    if closest_eggs:
-        if cmd:
-            cmd += "; "
-        cmd += f"{Commands.LINE.value} {my_base_index} {closest_eggs[0][0]} 1"
+        print_debug(f"num_crystals = {num_crystals}, num_eggs = {num_eggs}")
 
-    if not cmd:
-        cmd = Commands.WAIT.value
+        # Write an action using print
+        # To debug: print("Debug messages...", file=sys.stderr, flush=True)
+        for i in range(num_crystals):
+            if i >= len(closest_crystals[base_idx]):
+                break
+
+            if cmd:
+                cmd += "; "
+
+            cmd += f"{Commands.LINE.value} {base_idx} {closest_crystals[base_idx][i][0]} 2"
+
+        for i in range(num_eggs):
+            if i >= len(closest_eggs[base_idx]):
+                break
+
+            if cmd:
+                cmd += "; "
+
+            cmd += f"{Commands.LINE.value} {base_idx} {closest_eggs[base_idx][i][0]} 1"
+
+        if should_attack:
+            if cmd:
+                cmd += "; "
+
+            cmd += f"{Commands.BEACON.value} {opp_bases[opp_base_idx]} 2"
+
+    if cmd:
+        cmd += "; "
+    cmd += f"{Commands.MESSAGE.value} gl hf"
 
     print(cmd)
 
