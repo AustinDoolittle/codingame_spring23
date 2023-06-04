@@ -2,6 +2,7 @@ import dataclasses
 import enum
 import sys
 import math
+from collections import defaultdict
 from collections.abc import Set
 from typing import List
 
@@ -102,7 +103,7 @@ for i in range(number_of_cells):
         crystals.append(i)
     elif cell.type_ == CellType.EGGS:
         eggs.append(i)
-
+starting_num_crystals = len(crystals)
 
 my_bases = set()
 number_of_bases = int(input())
@@ -130,6 +131,7 @@ for base_idx in my_bases:
 starting_ants = 0
 while True:
     my_ants_count = 0
+    my_score, opp_score = [int(j) for j in input().split()]
     for i in range(number_of_cells):
         # resources: the current amount of eggs/crystals on this cell
         # my_ants: the amount of your ants on this cell
@@ -143,7 +145,9 @@ while True:
     if starting_ants == 0:
         starting_ants = my_ants_count
 
-    cmd = ""
+    cmd = f"{Commands.MESSAGE.value} gl hf"
+
+    lines = defaultdict(dict)
     for opp_base_idx, base_idx in enumerate(my_bases):
         for idx in range(len(closest_crystals[base_idx])-1, -1, -1):
             if cells[closest_crystals[base_idx][idx][0]].resources == 0:
@@ -155,44 +159,56 @@ while True:
 
         # num_crystals = 3 + int(not bool(closest_eggs[base_idx])) * 2
         should_attack = False
-        num_crystals = math.ceil(my_ants_count / (starting_ants * 1.0))
         if closest_eggs[base_idx]:
-            num_eggs = math.ceil(my_ants_count / (starting_ants * 2.0)) + 1
+            num_crystals = min(math.ceil(my_ants_count / (starting_ants * 1.0)), math.ceil(starting_num_crystals / 2.0))
+            num_eggs = math.ceil(my_ants_count / (starting_ants * 1.0))
         else:
+            num_crystals = min(math.ceil(my_ants_count / (starting_ants * 1.0)), math.ceil(starting_num_crystals / 2.0))
             num_eggs = 0
             should_attack = True
+
+        num_eggs = min(num_eggs, int(len(closest_crystals[base_idx])))
 
         print_debug(f"num_crystals = {num_crystals}, num_eggs = {num_eggs}")
 
         # Write an action using print
         # To debug: print("Debug messages...", file=sys.stderr, flush=True)
+        lines[base_idx] = {
+            "planned_lines": set(),
+            "distances": {}
+        }
         for i in range(num_crystals):
             if i >= len(closest_crystals[base_idx]):
                 break
-
-            if cmd:
-                cmd += "; "
-
-            cmd += f"{Commands.LINE.value} {base_idx} {closest_crystals[base_idx][i][0]} 2"
+            lines[base_idx]["planned_lines"].add(closest_crystals[base_idx][i][0])
+            lines[base_idx]["distances"][closest_crystals[base_idx][i][0]] = len(closest_crystals[base_idx][i][1])
 
         for i in range(num_eggs):
             if i >= len(closest_eggs[base_idx]):
                 break
-
-            if cmd:
-                cmd += "; "
-
-            cmd += f"{Commands.LINE.value} {base_idx} {closest_eggs[base_idx][i][0]} 1"
+            lines[base_idx]["planned_lines"].add(closest_eggs[base_idx][i][0])
+            lines[base_idx]["distances"][closest_eggs[base_idx][i][0]] = len(closest_eggs[base_idx][i][1])
 
         if should_attack:
-            if cmd:
-                cmd += "; "
+            cmd += f"; {Commands.BEACON.value} {opp_bases[opp_base_idx]} 2"
 
-            cmd += f"{Commands.BEACON.value} {opp_bases[opp_base_idx]} 2"
+    all_planned_lines = set()
+    for base_idx in lines:
+        all_planned_lines = all_planned_lines.union(lines[base_idx]["planned_lines"])
 
-    if cmd:
-        cmd += "; "
-    cmd += f"{Commands.MESSAGE.value} gl hf"
+    for line in all_planned_lines:
+        min_distance = 100000000000
+        target_base = -1
+        for base_idx in my_bases:
+            if line not in lines[base_idx]["planned_lines"]:
+                continue
+            if lines[base_idx]['distances'][line] < min_distance:
+                min_distance = lines[base_idx]['distances'][line]
+                target_base = base_idx
+
+        weight = 3 if cells[line].type_ == CellType.EGGS else 2
+        # weight = 2
+        cmd += f"; {Commands.LINE.value} {target_base} {line} {weight}"
 
     print(cmd)
 
